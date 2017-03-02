@@ -1,18 +1,49 @@
 window.onload = function() {
+ 
+ 	dataRollx = 0;
+	dataRolly = 0;
+	dataRollz = 0;
+
+  var a_box = document.querySelector('a-box');
+  var text;   // variable for the text div you'll create
+  var socket = new WebSocket("ws://localhost:8081");
+  function setup() {
+    // The socket connection needs two event listeners:
+    socket.onopen = openSocket;
+    socket.onmessage = showData;
+    // make a new div and position it at 10, 10:
+
+  }
+  function openSocket() {
+    socket.send("Hello server");
+  }
+  /*
+  showData(), below, will get called whenever there is new Data
+  from the server. So there's no need for a draw() function:
+  */
+  function showData(result) {
+    // when the server returns, show the result in the div:
+    var res = result.data.split(" ");
+    console.log("Sensor reading:" + res[1] + " " + res[2] + " " + res[3]);
+    dataRollx = res[1];
+    dataRolly = res[2];
+    dataRollz = res[3];
+  }
+
+
 
 	var clock = new THREE.Clock();
 	var intervalID;
 	var scene, povCamera, renderer, controls, stats;
 	var windowWidth, windowHeight;
 	var maleHead, femaleHead;
-	var orbiter, pattern = 1, orbitSpeed = 0.01;	
+	var orbiter, pattern = 1, orbitSpeed = 0.01;
+	var orbiter2, pattern = 1, orbitSpeed2 = 0.01;		
 	var audioElement, panner, masterGain;
+	var audioElement2, panner2, masterGain2;
 	var subjects = [], currentSubject = {}, currentSubjectIndex = -1;
 	var tracks = [
-		"assets/audio/core3.mp3",
-		"assets/audio/trumpet.ogg",
-		"assets/audio/rotor.wav",
-		"assets/audio/square.wav"
+		"assets/audio/ibm.mp3"
 	];
 	var views = [
 			{
@@ -53,6 +84,10 @@ window.onload = function() {
 	init();
 	animate();
 
+
+	
+
+
 	function init() {
 
 		stats = initStats();
@@ -84,8 +119,17 @@ window.onload = function() {
 		scene.add(light);
 
 		// orbiter
-		orbiter = new THREE.Mesh(new THREE.SphereGeometry(0.1, 64, 64), new THREE.MeshPhongMaterial({ color: 0x000000 }));
+		orbiter = new THREE.Mesh(new THREE.SphereGeometry(0.1, 64, 64), new THREE.MeshPhongMaterial({ color: 0xCCCCCC }));
 		scene.add(orbiter);
+		orbiter2 = new THREE.Mesh(new THREE.SphereGeometry(0.1, 64, 64), new THREE.MeshPhongMaterial({ color: 0x000000 }));
+		scene.add(orbiter2);
+
+		cube = new THREE.Mesh( new THREE.CubeGeometry( 64, 64, 64 ), new THREE.MeshPhongMaterial({ color: 0xCCCCCC }));
+		cube.position.y = 10;
+
+
+	    scene.add( cube );
+
 		// wireframe sphere
 		scene.add(new THREE.Mesh(new THREE.SphereGeometry(1, 32, 32), new THREE.MeshBasicMaterial({ color: 0xcccccc, wireframe: true })));
 
@@ -104,13 +148,20 @@ window.onload = function() {
 		audioElement = document.getElementById("player");
 		var source = audioContext.createMediaElementSource(audioElement);
 
+		audioElement2 = document.getElementById("player2");
+		var source2  = audioContext.createMediaElementSource(audioElement2);
+
 		masterGain = audioContext.createGain();
 		masterGain.connect(audioContext.destination);
 		masterGain.gain.value = 0.6;
 		panner = new HRTFPanner(audioContext, source, currentSubject.hrtfContainer);
+		panner2 = new HRTFPanner(audioContext, source2, currentSubject.hrtfContainer);
+		console.log("panner2")
 		panner.connect(masterGain);
+		panner2.connect(masterGain);
 		intervalID = setInterval(updatePanner, 50);
 		audioElement.play();
+		audioElement2.play();
 	}
 
 	function initStats() {
@@ -127,78 +178,7 @@ window.onload = function() {
 		return stats;
 	}
 
-	function initGUI() {
 
-		var gui = new dat.GUI();
-		gui.width = 300;
-
-		var guiParams = {
-			nextSubject: function() {
-				if (currentSubjectIndex < subjects.length - 1) {
-					var nextSubject = subjects[currentSubjectIndex + 1];
-					loadSubject(nextSubject, function() {
-						currentSubjectIndex++;
-						panner.setHrtfContainer(subjects[currentSubjectIndex].hrtfContainer);
-					});
-				}
-			},
-			prevSubject: function() {
-				if (currentSubjectIndex > 0) {
-					var nextSubject = subjects[currentSubjectIndex - 1];
-					loadSubject(nextSubject, function() {
-						currentSubjectIndex--;
-						panner.setHrtfContainer(subjects[currentSubjectIndex].hrtfContainer);
-					});
-				}
-			},
-			pause: function() {
-				if (audioElement.paused)
-					audioElement.play();
-				else
-					audioElement.pause();
-			},
-			crossoverFrequency: 200,
-			updateInterval: 20,
-			gain: masterGain.gain.value,
-			sound: "",
-			pattern: 1,
-			speed: orbitSpeed
-		}
-
-		var folder1 = gui.addFolder("HRTF");
-		folder1.add(currentSubject, "id").name("Subject ID").listen();
-		folder1.add(currentSubject, "name").name("Name").listen();
-		folder1.add(currentSubject, "headWidth").name("Head Width [cm]").listen();
-		folder1.add(currentSubject, "headHeight").name("Head Height [cm]").listen();
-		folder1.add(currentSubject, "headDepth").name("Head Depth [cm]").listen();
-		folder1.add(guiParams, "nextSubject").name("NEXT SUBJECT");
-		folder1.add(guiParams, "prevSubject").name("PREV SUBJECT");
-
-		var folder2 = gui.addFolder("Panner settings");
-		folder2.add(guiParams, "crossoverFrequency").min(0).max(5000).name("Crossover frequency").onChange(function(value) {
-			panner.setCrossoverFrequency(value);
-		});
-		folder2.add(guiParams, "updateInterval").min(10).max(1000).name("Update interval").onChange(function(value) {
-			clearInterval(intervalID);
-			intervalID = setInterval(updatePanner, value);
-		});
-
-		var folder3 = gui.addFolder("Sound source");
-		folder3.add(guiParams, "pause").name("Play/Pause");
-		folder3.add(guiParams, "gain").min(0).max(1).name("Volume").onChange(function(value) {
-			masterGain.gain.value = value;
-		});
-		folder3.add(guiParams, "sound").options({ "Robot": 0, "Trumpet": 1, "Helicopter": 2, "Saw": 3 }).name("Sound").onChange(function(value) {
-			audioElement.src = tracks[value];
-			audioElement.play();
-		});
-		folder3.add(guiParams, "pattern").options(1, 2, 3).name("Orbit pattern").onChange(function(value) {
-			pattern = value;
-		});
-		folder3.add(guiParams, "speed").min(0).max(0.1).name("Orbit speed").onChange(function(value) {
-			orbitSpeed = value;
-		});
-	}
 
 	function hrirFilenameFromId(id) {
 
@@ -212,6 +192,11 @@ window.onload = function() {
 		filename += id + ".bin";
 		return filename;
 	}
+
+	function initGUI()
+	{
+
+	} 
 
 	function loadHeadModels(onLoad) {
 
@@ -297,21 +282,16 @@ window.onload = function() {
 
 		var R = 1;
 		orbiter.lookAt(scene.position);
-		if (pattern == 1) {
-			orbiter.position.x = R * Math.cos(t);
-			orbiter.position.y = 0;
-			orbiter.position.z = R * Math.sin(t);
-		}
-		else if (pattern == 2) {
-			orbiter.position.x = 0;
-			orbiter.position.y = R * Math.cos(t);
-			orbiter.position.z = R * Math.sin(t);
-		}
-		else if (pattern == 3) {
-			orbiter.position.x = R * Math.sin(t) * Math.cos(t);
-			orbiter.position.y = R * Math.cos(t) * Math.cos(t);
-			orbiter.position.z = R * Math.sin(t);
-		}
+		orbiter2.lookAt(scene.position);
+		
+		orbiter.position.x = R * Math.cos(t);
+		orbiter.position.y = 0;
+		orbiter.position.z = R * Math.sin(t);
+
+		orbiter2.position.x = -R * Math.cos(t);
+		orbiter2.position.y = 0;
+		orbiter2.position.z = -R * Math.sin(t);
+
 		t += orbitSpeed;
 	}
 
@@ -321,6 +301,11 @@ window.onload = function() {
 		stats.update();
 		updateSize();
 		animateSource();
+		updateOrientation();
+	}
+
+	function updateOrientation() {
+		console.log("Sensor reading:" + dataRollx + " " + dataRolly + " " + dataRollz);
 	}
 
 	function updatePanner() {
@@ -331,6 +316,13 @@ window.onload = function() {
 		sourcePos.applyMatrix4(mInverse);
 		var cords = cartesianToInteraural(sourcePos.x, -sourcePos.z, sourcePos.y);
 		panner.update(cords.azm, cords.elv);
+
+		var mInverse = new THREE.Matrix4().getInverse(povCamera.matrixWorld);
+		var sourcePos = orbiter.position.clone();
+		sourcePos.applyMatrix4(mInverse);
+		var cords = cartesianToInteraural(sourcePos.x, -sourcePos.z, sourcePos.y);
+		panner2.update(cords.azm, cords.elv);
+
 	}
 	
 	function updateSize() {
